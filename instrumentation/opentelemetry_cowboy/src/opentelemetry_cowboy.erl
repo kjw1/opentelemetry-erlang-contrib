@@ -32,6 +32,7 @@ handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, _Con
     otel_propagator_text_map:extract(maps:to_list(Headers)),
     {RemoteIP, _Port} = maps:get(peer, Req),
     Method = maps:get(method, Req),
+    Target = maps:get(path, Req),
 
     Attributes = #{
                   'http.client_ip' => client_ip(Headers, RemoteIP),
@@ -40,12 +41,12 @@ handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, _Con
                   'http.host.port' => maps:get(port, Req),
                   'http.method' => Method,
                   'http.scheme' => maps:get(scheme, Req),
-                  'http.target' => maps:get(path, Req),
+                  'http.target' => Target,
                   'http.user_agent' => maps:get(<<"user-agent">>, Headers, <<"">>),
                   'net.host.ip' => iolist_to_binary(inet:ntoa(RemoteIP)),
                   'net.transport' => 'IP.TCP'
                  },
-    SpanName = iolist_to_binary([<<"HTTP ">>, Method]),
+    SpanName = iolist_to_binary([<<"HTTP ">>, Method, <<" ">>, Target]),
     Opts = #{attributes => Attributes, kind => ?SPAN_KIND_SERVER},
     otel_telemetry:start_telemetry_span(?TRACER_ID, SpanName, Meta, Opts);
 
