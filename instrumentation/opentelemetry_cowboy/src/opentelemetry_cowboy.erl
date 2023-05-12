@@ -27,10 +27,6 @@ attach_event_handlers(Config) ->
              ],
     telemetry:attach_many(opentelemetry_cowboy_handlers, Events, fun ?MODULE:handle_event/4, Config).
 
-generate_default_name(Req) ->
-    Method = maps:get(method, Req),
-    iolist_to_binary([<<"HTTP ">>, Method]).
-
 handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, Config) ->
     Headers = maps:get(headers, Req),
     otel_propagator_text_map:extract(maps:to_list(Headers)),
@@ -120,6 +116,10 @@ handle_event([cowboy, request, early_error], Measurements, Meta, _Config) ->
     otel_span:set_status(Ctx, opentelemetry:status(?OTEL_STATUS_ERROR, Reason)),
     otel_telemetry:end_telemetry_span(?TRACER_ID, Meta),
     otel_ctx:clear().
+
+generate_default_name(Req) ->
+    Method = maps:get(method, Req),
+    iolist_to_binary([<<"HTTP ">>, Method]).
 
 transform_status_to_code(Status) when is_binary(Status) ->
   [CodeString | _Message] = string:split(Status, " "),
