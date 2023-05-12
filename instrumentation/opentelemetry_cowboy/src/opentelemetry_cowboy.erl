@@ -11,23 +11,27 @@
 
 -spec setup() -> ok.
 setup() ->
-    setup([]).
+    setup(#{}).
 
--spec setup([]) -> ok.
-setup(_Opts) ->
-    attach_event_handlers(),
+-spec setup(map()) -> ok.
+setup(Config) when is_map(Config) ->
+    attach_event_handlers(Config),
     ok.
 
-attach_event_handlers() ->
+attach_event_handlers(Config) ->
     Events = [
               [cowboy, request, early_error],
               [cowboy, request, start],
               [cowboy, request, stop],
               [cowboy, request, exception]
              ],
-    telemetry:attach_many(opentelemetry_cowboy_handlers, Events, fun ?MODULE:handle_event/4, #{}).
+    telemetry:attach_many(opentelemetry_cowboy_handlers, Events, fun ?MODULE:handle_event/4, Config).
 
-handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, _Config) ->
+generate_default_name(Req) ->
+    Method = maps:get(method, Req),
+    iolist_to_binary([<<"HTTP ">>, Method]).
+
+handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, Config) ->
     Headers = maps:get(headers, Req),
     otel_propagator_text_map:extract(maps:to_list(Headers)),
     {RemoteIP, _Port} = maps:get(peer, Req),
@@ -46,7 +50,8 @@ handle_event([cowboy, request, start], _Measurements, #{req := Req} = Meta, _Con
                   'net.host.ip' => iolist_to_binary(inet:ntoa(RemoteIP)),
                   'net.transport' => 'IP.TCP'
                  },
-    SpanName = iolist_to_binary([<<"HTTP ">>, Method, <<" ">>, Target]),
+    NameGenerator = maps:get(span_name_fn, Config, fun generate_default_name/1),
+    SpanName = NameGenerator(Req),
     Opts = #{attributes => Attributes, kind => ?SPAN_KIND_SERVER},
     otel_telemetry:start_telemetry_span(?TRACER_ID, SpanName, Meta, Opts);
 
